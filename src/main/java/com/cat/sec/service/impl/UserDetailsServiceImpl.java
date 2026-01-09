@@ -1,0 +1,252 @@
+/*
+ * MIT License
+ * Copyright (c) 2020-2029 YongWu zheng (dcenter.top and gitee.com/pcore and github.com/ZeroOrInfinity)
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package com.cat.sec.service.impl;
+
+import com.cat.bis.dto.UserInfoDTO;
+import com.cat.bis.entity.UserB;
+import com.cat.bis.service.UserService;
+import com.cat.common.enums.ErrorCodeEnum;
+import com.cat.common.exception.CatException;
+import com.cat.sec.service.CatUserDetailsService;
+import com.cat.sec.util.LoginUser;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.lang.NonNull;
+import org.springframework.security.authentication.InternalAuthenticationServiceException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserCache;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletWebRequest;
+
+import java.util.List;
+
+/**
+ *  用户密码与手机短信登录与注册服务：<br><br>
+ *  1. 用于第三方登录与手机短信登录逻辑。<br><br>
+ *  2. 用于用户密码登录逻辑。<br><br>
+ *  3. 用户注册逻辑。<br><br>
+ * @author YongWu zheng
+ * @version V1.0  Created by 2020/9/20 11:06
+ */
+@Service
+@Slf4j
+public class UserDetailsServiceImpl implements CatUserDetailsService {
+
+    /**
+     * 用户名
+     */
+    public static final String PARAM_USERNAME = "username";
+
+    /**
+     * 密码
+     */
+    public static final String PARAM_PASSWORD = "password";
+
+    @SuppressWarnings("SpringJavaAutowiredFieldsWarningInspection")
+    @Autowired(required = false)
+    private UserCache userCache;
+    /**
+     * 用于密码加解密
+     */
+    @SuppressWarnings("SpringJavaAutowiredFieldsWarningInspection")
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private UserService userService;
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        try
+        {
+            // 从缓存中查询用户信息
+            if (this.userCache != null)
+            {
+                UserDetails userDetails = this.userCache.getUserFromCache(username);
+                if (userDetails != null)
+                {
+                    return userDetails;
+                }
+            }
+            // 根据用户名获取用户信息
+            UserInfoDTO userInfo = userService.selectOneByName(username);
+            if (userInfo == null) {
+                throw new InternalAuthenticationServiceException("用户名未找到!");
+            }
+            log.info("Demo svc ======>: 登录用户名：{}, 登录成功", username);
+            LoginUser loginUser = new LoginUser();
+            loginUser.setUserId(userInfo.getId());
+            loginUser.setUserName(userInfo.getUserName());
+            loginUser.setPassword(userInfo.getPwd());
+            loginUser.setName(userInfo.getName());
+            return loginUser;
+        }
+        catch (Exception e)
+        {
+            String msg = String.format("Demo svc======>: 登录用户名：%s, 登录失败: %s", username, e.getMessage());
+            log.error(msg);
+            throw new CatException(ErrorCodeEnum.QUERY_USER_INFO_ERROR.getCode(), e.getMessage());
+        }
+    }
+
+
+    @Override
+    public UserDetails registerUser(String mobile) throws CatException {
+
+        if (mobile == null)
+        {
+            throw new CatException(ErrorCodeEnum.MOBILE_NOT_EMPTY.getCode());
+        }
+
+        // 用户信息持久化逻辑
+        UserB userB = new UserB(mobile, passwordEncoder.encode(mobile), null, mobile);
+        userService.insertUser(userB);
+
+        log.info("Demo ======>: 手机短信登录用户 {}：注册成功", mobile);
+
+        User user = new User(mobile, userB.getPwd(), AuthorityUtils.commaSeparatedStringToAuthorityList(userB.getUserRole())
+        );
+
+        // 把用户信息存入缓存
+        if (userCache != null)
+        {
+            userCache.putUserInCache(user);
+        }
+
+        return user;
+    }
+
+//    @Override
+//    @NonNull
+//    public UserDetails registerUser(@NonNull String mobile, Map<String, String> otherParamMap) throws RegisterUserFailureException {
+//        return registerUser(mobile);
+//    }
+
+    @Override
+    public UserDetails registerUser(ServletWebRequest request) throws CatException {
+
+        String username = getValueOfRequest(request, PARAM_USERNAME, ErrorCodeEnum.USERNAME_NOT_EMPTY);
+        String password = getValueOfRequest(request, PARAM_PASSWORD, ErrorCodeEnum.PASSWORD_NOT_EMPTY);
+        // ...
+
+        // UserInfo userInfo = getUserInfo(request)
+
+        // 用户信息持久化逻辑。。。
+        // ...
+
+        String encodedPassword = passwordEncoder.encode(password);
+
+        log.info("Demo ======>: 用户名：{}, 注册成功", username);
+        User user = new User(username,
+                             encodedPassword,
+                             true,
+                             true,
+                             true,
+                             true,
+                             AuthorityUtils.commaSeparatedStringToAuthorityList("admin, ROLE_USER")
+        );
+
+        // 把用户信息存入缓存
+        if (userCache != null)
+        {
+            userCache.putUserInCache(user);
+        }
+
+        return user;
+
+    }
+
+//    @Override
+//    public UserDetails registerUser(@NonNull AuthUser authUser, @NonNull String username, @NonNull String defaultAuthority,
+//                                    String decodeState) throws CatException {
+//
+//        // 第三方授权登录不需要密码, 这里随便设置的, 生成环境按自己的逻辑
+//        String encodedPassword = passwordEncoder.encode(authUser.getUuid());
+//
+//        // 这里的 decodeState 可以根据自己实现的 top.dcenter.ums.security.core.oauth.service.Auth2StateCoder 接口的逻辑来传递必要的参数.
+//        // 比如: 第三方登录成功后的跳转地址
+//        final RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+//        // 假设 decodeState 就是 redirectUrl, 我们直接把 redirectUrl 设置到 request 上
+//        // 后续经过成功处理器时直接从 requestAttributes.getAttribute("redirectUrl", RequestAttributes.SCOPE_REQUEST) 获取并跳转
+//        if (requestAttributes != null) {
+//            requestAttributes.setAttribute("redirectUrl", decodeState, RequestAttributes.SCOPE_REQUEST);
+//        }
+//        // 当然 decodeState 也可以传递从前端传到后端的用户信息, 注册到本地用户
+//
+//        List<GrantedAuthority> grantedAuthorities = AuthorityUtils.commaSeparatedStringToAuthorityList(defaultAuthority);
+//
+//        // ... 用户注册逻辑
+//
+//        log.info("Demo ======>: 用户名：{}, 注册成功", username);
+//
+//        // @formatter:off
+//        UserDetails user = User.builder()
+//                               .username(username)
+//                               .password(encodedPassword)
+//                               .disabled(false)
+//                               .accountExpired(false)
+//                               .accountLocked(false)
+//                               .credentialsExpired(false)
+//                               .authorities(grantedAuthorities)
+//                               .build();
+//        // @formatter:off
+//
+//        // 把用户信息存入缓存
+//        if (userCache != null)
+//        {
+//            userCache.putUserInCache(user);
+//        }
+//
+//        return user;
+//    }
+
+    private String getValueOfRequest(ServletWebRequest request, String paramName, ErrorCodeEnum usernameNotEmpty) throws CatException {
+        String result = request.getParameter(paramName);
+        if (result == null)
+        {
+            throw new CatException(usernameNotEmpty.getCode(), request.getSessionId());
+        }
+        return result;
+    }
+    @NonNull
+    @Override
+    public UserDetails loadUserByUserId(@NonNull String userId) throws UsernameNotFoundException {
+        // TODO
+        return null;
+    }
+    @NonNull
+    @Override
+    public List<Boolean> existedByUsernames(@NonNull String... usernames) throws UsernameNotFoundException {
+        // TODO
+        return null;
+    }
+
+}

@@ -1,0 +1,68 @@
+server:
+  port: 9090
+  servlet:
+    context-path: /mintcat
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  application:
+    name: mintcat
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  datasource:
+    url: jdbc:mysql://192.168.164.44:3306/ums?useSSL=false&serverTimezone=UTC&&characterEncoding=utf-8
+    username: root
+    password: Admin@123.
+    driver-class-name: com.mysql.jdbc.Driver
+  jpa:
+    show-sql: true  #控制台显示SQL
+    database: mysql
+  #    hibernate:
+  #      ddl-auto: update  #更新或者创建数据表结构
+  redis:
+    host: 192.168.164.44
+    port: 6379
+    password: Admin123.
+
+security:
+  basic:
+    enabled: false
+
+# jwt配置
+jwt:
+  # 令牌自定义标识
+  header: Authorization
+  # 令牌密钥
+  secret: abcdefghijklmnopqrstuvwxyz
+  # 令牌有效期（默认30分钟）
+  expireTime: 30
+
+session:
+  redis:
+    host: 192.168.164.44
+    port: 6379
+    password: Admin123.
+    pool:
+      maxIdle: 5
+      maxTotal: 10
+      maxWaitMillis: 5000
+      testOnBorrow: false
+      testOnReturn: false
+    timeout: 30000
+
+mybatis-plus:
+  config-location: classpath:mybatis-config.xml
+  mapper-locations: classpath:xml/*Mapper.xml
+
+# 开启MyBatis Plus SQL日志输出
+logging:
+  level:
+    root: info
+    com.ibatis: info
+    org.springframework.boot.SpringApplication: debug
+  file:
+    path: ./logs/app
+
+
